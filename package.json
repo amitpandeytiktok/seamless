@@ -1,0 +1,50 @@
+{
+  "name": "seamless",
+  "version": "0.1.0",
+  "description": "Seamless — a session-aware control room for the GitHub Copilot CLI on Windows. Discover, resume, and live-monitor Copilot sessions (context window, efficiency, git/worktree/cwd).",
+  "main": "src/electron/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "server": "node src/server/server.js",
+    "dev": "node src/server/server.js",
+    "test": "node test/test-core.mjs"
+  },
+  "keywords": [
+    "github-copilot",
+    "copilot-cli",
+    "context-window",
+    "token-usage",
+    "session-manager",
+    "dashboard",
+    "electron",
+    "developer-tools",
+    "windows"
+  ],
+  "author": "Amit Pandey (@amitpandeytiktok)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amitpandeytiktok/seamless.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amitpandeytiktok/seamless/issues"
+  },
+  "homepage": "https://github.com/amitpandeytiktok/seamless#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ],
+  "files": [
+    "src",
+    "assets",
+    "scripts/gen-icon.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

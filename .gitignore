@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Seamless runtime config (per-user, may contain LAN host/port choices)
+.seamless/
+
+# Build output
+dist/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local scratch
+seamless-probe/

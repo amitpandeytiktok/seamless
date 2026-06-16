@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seamless · Copilot Session Control Room</title>
+    <link rel="icon" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">Seamless</span>
+        <span class="brand-sub">Copilot session control room</span>
+      </div>
+      <div class="topbar-right">
+        <span id="conn" class="conn" title="Live connection">
+          <span class="conn-dot"></span><span class="conn-text">connecting…</span>
+        </span>
+        <button id="btn-refresh" class="btn ghost" title="Refresh">⟳</button>
+        <button id="btn-settings" class="btn ghost" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <span>Sessions</span>
+          <span id="session-count" class="muted"></span>
+        </div>
+        <div id="session-list" class="session-list"></div>
+        <div class="sidebar-foot">
+          <button id="btn-new" class="btn primary block">＋ New session here…</button>
+        </div>
+      </aside>
+
+      <section id="detail" class="detail">
+        <div class="empty">Loading session…</div>
+      </section>
+    </main>
+
+    <!-- Settings drawer -->
+    <div id="settings-drawer" class="drawer hidden">
+      <div class="drawer-head">
+        <h3>Settings</h3>
+        <button id="settings-close" class="btn ghost">✕</button>
+      </div>
+      <div class="drawer-body" id="settings-body"></div>
+    </div>
+    <div id="scrim" class="scrim hidden"></div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
