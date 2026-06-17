@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS = {
   terminal: 'auto', // auto | pwsh | powershell | cmd
   contextLimitOverride: 0, // >0 to force a context window size
   openBrowserOnStart: false,
+  watchdogLog: '', // path to the worker fleet watchdog JSONL log (enables the fleet pill)
 };
 
 export function loadSettings() {

@@ -10,6 +10,7 @@ import { gitInfo } from '../core/git.js';
 import { recommend } from '../core/analyze.js';
 import * as actions from '../core/actions.js';
 import { createWatcher } from '../core/watch.js';
+import { readWatchdog } from '../core/watchdog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -110,6 +111,11 @@ function handleApi(req, res, url) {
     const detail = buildDetail(m[1]);
     if (!detail) return notFound(res);
     return sendJson(res, 200, { session: detail, now: Date.now() });
+  }
+
+  // GET /api/watchdog  -> latest fleet health from the worker box's JSONL log
+  if (method === 'GET' && pathname === '/api/watchdog') {
+    return sendJson(res, 200, { ...readWatchdog(), now: Date.now() });
   }
 
   // GET/POST /api/settings

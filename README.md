@@ -57,6 +57,10 @@ auto-refreshes live over Server-Sent Events as your sessions change on disk.
   checkpoints, and todos.
 - **Actions** — **Resume** the session (`copilot -C <cwd> --resume <id>`), open a **Terminal**
   in its cwd, reveal its **Folder**, or start a **New session here**.
+- **Fleet watchdog** _(optional)_ — a top-bar pill showing health of your always-on worker
+  box. Point `watchdogLog` at a JSONL log whose last line is
+  `{ ts, host, down, results:[{ name, url, ok, status, ms, ageMin? }] }`; click the pill for a
+  per-target breakdown (status, latency, feed freshness). Hidden when unconfigured.
 
 ---
 
@@ -94,6 +98,7 @@ src/
     analyze.js   recommendation engine
     actions.js   resume / new / terminal / open-folder launchers
     watch.js     debounced recursive fs.watch over the session-state dir
+    watchdog.js  optional fleet-health bridge (tail-reads an external watchdog JSONL log)
   server/
     server.js    node:http REST + SSE + static file server
   web/           vanilla dashboard (no build step): index.html, styles.css, app.js
@@ -124,6 +129,7 @@ Stored at `~/.seamless/config.json` (editable from the dashboard gear menu):
 | ------ | ------------- | -------------------------------------------------- |
 | `port` | `4321`        | server port                                        |
 | `host` | `127.0.0.1`   | bind address; set `0.0.0.0` to expose on the LAN   |
+| `watchdogLog` | `''`   | path to a fleet watchdog JSONL log; enables the top-bar health pill (also settable via `SEAMLESS_WATCHDOG_LOG`) |
 
 Model context-window limits and warn/danger thresholds live in `src/core/config.js`.
 

@@ -15,6 +15,9 @@
         <span class="brand-sub">Copilot session control room</span>
       </div>
       <div class="topbar-right">
+        <button id="watchdog" class="wd hidden" title="Fleet health — click for detail">
+          <span class="wd-dot"></span><span class="wd-text">fleet</span>
+        </button>
         <span id="conn" class="conn" title="Live connection">
           <span class="conn-dot"></span><span class="conn-text">connecting…</span>
         </span>
@@ -22,6 +25,9 @@
         <button id="btn-settings" class="btn ghost" title="Settings">⚙</button>
       </div>
     </header>
+
+    <!-- Fleet watchdog popover -->
+    <div id="wd-panel" class="wd-panel hidden"></div>
 
     <main class="layout">
       <aside class="sidebar">

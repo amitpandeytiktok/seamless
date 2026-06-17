@@ -753,3 +753,127 @@ body {
   color: var(--muted);
   margin: 22px 0 10px;
 }
+
+/* ---------- fleet watchdog ---------- */
+.wd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.wd:hover {
+  border-color: var(--muted);
+}
+.wd.hidden {
+  display: none;
+}
+.wd-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-2);
+}
+.wd.ok .wd-dot {
+  background: var(--good);
+}
+.wd.ok .wd-text {
+  color: var(--good);
+}
+.wd.warn .wd-dot {
+  background: var(--warn);
+}
+.wd.warn .wd-text {
+  color: var(--warn);
+}
+.wd.err .wd-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 0 #f8717188;
+  animation: pulse 1.8s infinite;
+}
+.wd.err .wd-text {
+  color: var(--danger);
+}
+.wd-panel {
+  position: fixed;
+  top: 58px;
+  right: 14px;
+  z-index: 40;
+  width: 300px;
+  max-width: calc(100vw - 28px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 18px 50px #00000066;
+}
+.wd-panel.hidden {
+  display: none;
+}
+.wd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.wd-sub {
+  font-weight: 500;
+  font-size: 11px;
+}
+.wd-sub.good {
+  color: var(--good);
+}
+.wd-sub.bad {
+  color: var(--danger);
+}
+.wd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+}
+.wd-rdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted-2);
+}
+.wd-rdot.ok {
+  background: var(--good);
+}
+.wd-rdot.err {
+  background: var(--danger);
+}
+.wd-name {
+  flex: 1;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wd-meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.wd-foot {
+  margin-top: 8px;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.wd-empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 0;
+}

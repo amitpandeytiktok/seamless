@@ -478,6 +478,78 @@ function scheduleRefetch() {
     setTimeout(() => card && card.classList.remove('updated-flash'), 700);
   }, 350);
 }
+/* ---------- fleet watchdog ---------- */
+function renderWatchdog(w) {
+  const pill = $('#watchdog');
+  const panel = $('#wd-panel');
+  if (!pill || !panel) return;
+  if (!w || w.configured === false) {
+    pill.classList.add('hidden');
+    panel.classList.add('hidden');
+    return;
+  }
+  pill.classList.remove('hidden');
+
+  const results = Array.isArray(w.results) ? w.results : [];
+  const total = results.length;
+  const down = typeof w.down === 'number' ? w.down : results.filter((r) => !r.ok).length;
+  const up = total - down;
+  const tsMs = typeof w.ts === 'number' ? w.ts : Date.parse(w.ts);
+  const stale = tsMs ? Date.now() - tsMs > 30 * 60 * 1000 : false;
+
+  let cls = 'ok';
+  let label = `Fleet ${up}/${total}`;
+  if (w.error) {
+    cls = 'err';
+    label = 'Fleet ?';
+  } else if (total === 0) {
+    cls = 'warn';
+    label = 'Fleet –';
+  } else if (down > 0) {
+    cls = 'err';
+  } else if (stale) {
+    cls = 'warn';
+  }
+  pill.className = 'wd ' + cls;
+  pill.title = w.error ? 'Fleet watchdog: ' + w.error : `Fleet ${up}/${total} up · checked ${ago(w.ts)}`;
+  pill.querySelector('.wd-text').textContent = label;
+
+  if (w.error) {
+    panel.innerHTML = `<div class="wd-head">Fleet watchdog</div><div class="wd-empty">${esc(w.error)}</div>`;
+    return;
+  }
+  const rows = results
+    .map((r) => {
+      const meta = [];
+      if (r.status != null) meta.push(esc(r.status));
+      if (r.ms != null) meta.push(esc(r.ms) + 'ms');
+      if (r.ageMin != null) meta.push('feed ' + esc(r.ageMin) + 'm');
+      return `<div class="wd-row">
+        <span class="wd-rdot ${r.ok ? 'ok' : 'err'}"></span>
+        <span class="wd-name" ${r.url ? `data-copy="${esc(r.url)}" title="${esc(r.url)}"` : ''}>${esc(r.name || '?')}</span>
+        <span class="wd-meta">${meta.join(' · ')}</span>
+      </div>`;
+    })
+    .join('');
+  panel.innerHTML = `
+    <div class="wd-head">Fleet watchdog <span class="wd-sub ${down ? 'bad' : 'good'}">${
+      down ? down + ' down' : 'all green'
+    }</span></div>
+    ${rows || '<div class="wd-empty">No targets reported.</div>'}
+    <div class="wd-foot">checked ${esc(ago(w.ts))}${w.host ? ' · ' + esc(w.host) : ''}</div>`;
+  panel.querySelectorAll('.wd-name[data-copy]').forEach((el) =>
+    el.addEventListener('click', () => copy(el.dataset.copy))
+  );
+}
+async function loadWatchdog() {
+  try {
+    renderWatchdog(await api('/api/watchdog'));
+  } catch {
+    const pill = $('#watchdog');
+    if (pill) pill.classList.add('hidden');
+  }
+}
+
 function connectSSE() {
   const es = new EventSource('/api/stream');
   const conn = $('#conn');
@@ -524,6 +596,10 @@ async function openSettings() {
     copilot.effortLevel || '?'
   )}</div>
     </div>
+    <div class="field"><label>Fleet watchdog log path (optional)</label>
+      <input id="set-wd" value="${esc(settings.watchdogLog || '')}" placeholder="e.g. D:\\worker\\logs\\watchdog.jsonl">
+      <div class="hint">Point at the worker box's watchdog JSONL to show fleet health in the top bar.</div>
+    </div>
     <button class="btn primary block" id="set-save">Save (restart server to apply host/port)</button>
   `;
   $('#set-save').addEventListener('click', async () => {
@@ -536,11 +612,13 @@ async function openSettings() {
         terminal: $('#set-term').value,
         gitPath: $('#set-git').value.trim(),
         contextLimitOverride: Number($('#set-ctx').value) || 0,
+        watchdogLog: $('#set-wd').value.trim(),
       }),
     });
     toast('Settings saved');
     closeSettings();
     loadSessions();
+    loadWatchdog();
   });
   $('#settings-drawer').classList.remove('hidden');
   $('#scrim').classList.remove('hidden');
@@ -558,19 +636,37 @@ function newSessionPrompt() {
 }
 
 /* ---------- init ---------- */
-$('#btn-refresh').addEventListener('click', loadSessions);
+$('#btn-refresh').addEventListener('click', () => {
+  loadSessions();
+  loadWatchdog();
+});
 $('#btn-settings').addEventListener('click', openSettings);
 $('#settings-close').addEventListener('click', closeSettings);
 $('#scrim').addEventListener('click', closeSettings);
 $('#btn-new').addEventListener('click', newSessionPrompt);
 
+// Fleet watchdog pill: toggle the detail popover; close on outside click.
+$('#watchdog').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#wd-panel').classList.toggle('hidden');
+});
+document.addEventListener('click', (e) => {
+  const panel = $('#wd-panel');
+  if (panel.classList.contains('hidden')) return;
+  if (!panel.contains(e.target) && !$('#watchdog').contains(e.target)) panel.classList.add('hidden');
+});
+
 // ?static disables live connections (used for snapshots / headless rendering).
 const STATIC = new URLSearchParams(location.search).has('static');
 loadSessions();
+loadWatchdog();
 if (!STATIC) {
   connectSSE();
   setInterval(() => {
     // keep "ago" timers fresh even without events
     if (!document.hidden) loadSessions();
+  }, 30000);
+  setInterval(() => {
+    if (!document.hidden) loadWatchdog();
   }, 30000);
 }
