@@ -13,9 +13,10 @@
     <div id="gate" class="gate">
       <form id="gate-form" class="gate-card" autocomplete="off">
         <div class="gate-brand"><span class="dot"></span> Room&nbsp;CLI</div>
-        <p id="gate-sub" class="gate-sub">Enter your PIN to open the control room.</p>
+        <p id="gate-sub" class="gate-sub">Enter your 8-digit PIN to open the control room.</p>
         <input id="pin" class="pin-input" type="password" inputmode="numeric"
-               placeholder="••••" autocomplete="off" />
+               maxlength="8" minlength="8" pattern="\d{8}"
+               placeholder="••••••••" autocomplete="off" />
         <button id="gate-btn" class="btn primary block" type="submit">Unlock</button>
         <div id="gate-err" class="gate-err"></div>
       </form>

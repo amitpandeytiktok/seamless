@@ -71,7 +71,7 @@ async function initGate() {
     cfg = await (await fetch(API + '/config')).json();
   } catch {}
   if (cfg.needsSetup) {
-    $('#gate-sub').textContent = 'First run — set a PIN to lock your control room.';
+    $('#gate-sub').textContent = 'First run — set an 8-digit PIN to lock your control room.';
     $('#gate-btn').textContent = 'Set PIN & enter';
     $('#gate-form').dataset.mode = 'setup';
   }
@@ -94,7 +94,7 @@ $('#gate-form').addEventListener('submit', async (e) => {
   const pin = $('#pin').value.trim();
   const err = $('#gate-err');
   err.textContent = '';
-  if (!pin) return;
+  if (!/^\d{8}$/.test(pin)) { err.textContent = 'PIN must be exactly 8 digits'; return; }
   const setup = $('#gate-form').dataset.mode === 'setup';
   try {
     const r = await (await fetch(API + (setup ? '/auth/setup' : '/auth/login'), {

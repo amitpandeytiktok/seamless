@@ -64,10 +64,14 @@ console.log('=== auth ===');
 const slug = auth.getSlug();
 ok(slug && slug.length >= 10 && auth.getSlug() === slug, 'slug stable');
 ok(!auth.hasPin(), 'no pin initially');
-ok(auth.setPin('4729') === true, 'setPin first time');
-ok(auth.setPin('9999') === false, 'setPin refuses overwrite');
-ok(auth.verifyPin('4729') && !auth.verifyPin('0000'), 'verifyPin');
-const tok = auth.login('4729');
+ok(auth.setPin('47291837') === true, 'setPin first time (8 digits)');
+ok(auth.setPin('99999999') === false, 'setPin refuses overwrite');
+ok(auth.verifyPin('47291837') && !auth.verifyPin('00000000'), 'verifyPin');
+let threw7 = false; try { auth.setPin('1234567'); } catch { threw7 = true; }
+ok(threw7, 'setPin rejects 7 digits');
+let threwAlpha = false; try { auth.setPin('abcdefgh'); } catch { threwAlpha = true; }
+ok(threwAlpha, 'setPin rejects non-numeric 8 chars');
+const tok = auth.login('47291837');
 ok(tok && auth.checkToken(tok), 'login + checkToken');
 ok(!auth.checkToken('garbage'), 'bad token rejected');
 auth.logout(tok);

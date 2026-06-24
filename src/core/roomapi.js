@@ -115,7 +115,10 @@ export async function handleRoomApi(req, res, url) {
   if (rest === 'auth/login' && method === 'POST') {
     const body = await readBody(req);
     const token = auth.login(body.pin);
-    if (!token) return sendJson(res, 401, { error: 'invalid PIN' });
+    if (!token) {
+      if (auth.loginLocked()) return sendJson(res, 429, { error: 'too many attempts — wait a minute' });
+      return sendJson(res, 401, { error: 'invalid PIN' });
+    }
     sendJson(res, 200, { token });
     return true;
   }

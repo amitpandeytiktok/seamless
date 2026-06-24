@@ -41,10 +41,10 @@ function hashPin(pin, salt) {
   return crypto.scryptSync(String(pin), salt, 32).toString('hex');
 }
 
-// First-run PIN setup (4–12 digits/chars). Returns false if a PIN already exists.
+// First-run PIN setup (exactly 8 digits). Returns false if a PIN already exists.
 export function setPin(pin) {
-  if (!pin || String(pin).length < 4 || String(pin).length > 64) {
-    throw new Error('PIN must be 4–64 characters');
+  if (!/^\d{8}$/.test(String(pin))) {
+    throw new Error('PIN must be exactly 8 digits');
   }
   const state = load();
   if (state.pinHash) return false;
@@ -76,9 +76,29 @@ function purgeExpired(state) {
   return changed;
 }
 
+// Online brute-force throttle: after several bad PINs, briefly lock logins.
+// An 8-digit PIN is 100M combinations; this makes online guessing infeasible.
+const LOCK = { fails: 0, until: 0 };
+const MAX_FAILS = 5;
+const LOCK_MS = 60_000;
+
+export function loginLocked() {
+  return Date.now() < LOCK.until;
+}
+
 // Exchange a valid PIN for a bearer token.
 export function login(pin) {
-  if (!verifyPin(pin)) return null;
+  if (Date.now() < LOCK.until) return null;
+  if (!verifyPin(pin)) {
+    LOCK.fails += 1;
+    if (LOCK.fails >= MAX_FAILS) {
+      LOCK.until = Date.now() + LOCK_MS;
+      LOCK.fails = 0;
+    }
+    return null;
+  }
+  LOCK.fails = 0;
+  LOCK.until = 0;
   const state = load();
   state.tokens = state.tokens || {};
   purgeExpired(state);
