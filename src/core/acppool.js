@@ -11,6 +11,7 @@
 //   streaming via session/update notifications; tool gating via session/request_permission.
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
+import os from 'node:os';
 import { resolveCwd } from './roomstore.js';
 import { buildPrompt, extractMemory } from './engine.js';
 
@@ -253,10 +254,12 @@ class AcpWorker {
 // A pool of warm workers. Lazily fills to POOL_SIZE, hands a free worker to each
 // turn, queues when saturated, and replaces dead/over-used workers.
 class AcpPool {
-  constructor(size) {
+  constructor(size, makeWorker = () => new AcpWorker()) {
     this.size = size;
+    this.makeWorker = makeWorker;
     this.workers = [];
     this.queue = [];
+    this.drainTimer = null;
   }
 
   start() {
@@ -265,7 +268,7 @@ class AcpPool {
 
   _fill() {
     while (this.workers.length < this.size) {
-      const w = new AcpWorker();
+      const w = this.makeWorker();
       this.workers.push(w);
       w.start().catch(() => { w.dead = true; });
     }
@@ -287,39 +290,64 @@ class AcpPool {
 
   _acquire() {
     return new Promise((resolve, reject) => {
-      const tryGrab = () => {
+      const waiter = { resolve, reject, timer: null };
+      // Returns true (and resolves the waiter) iff a free worker was claimed.
+      const grab = () => {
         const w = this._free();
-        if (w) {
-          w.busy = true;
-          return resolve(w);
-        }
-        return false;
+        if (!w) return false;
+        w.busy = true;
+        resolve(w);
+        return true;
       };
-      if (tryGrab()) return;
-      this._reap();
-      if (tryGrab()) return;
-      const timer = setTimeout(() => {
-        const i = this.queue.findIndex((q) => q.timer === timer);
+      if (grab()) return;
+      this._reap(); // drop dead/over-used, refill (new workers warm asynchronously)
+      if (grab()) return;
+      waiter.grab = grab;
+      waiter.timer = setTimeout(() => {
+        const i = this.queue.indexOf(waiter);
         if (i >= 0) this.queue.splice(i, 1);
+        if (!this.queue.length) this._stopDrain();
         reject(new Error('no warm worker available'));
       }, ACQUIRE_TIMEOUT_MS);
-      this.queue.push({ resolve, reject, timer, tryGrab });
+      this.queue.push(waiter);
+      this._startDrain(); // wake the waiter once a reaped slot warms up
     });
+  }
+
+  // Hand free workers to queued waiters (FIFO). Called on release and on a poll
+  // so a waiter still gets served when its worker is replaced rather than freed.
+  _drainQueue() {
+    while (this.queue.length) {
+      const w = this._free();
+      if (!w) break;
+      const waiter = this.queue.shift();
+      clearTimeout(waiter.timer);
+      w.busy = true;
+      waiter.resolve(w);
+    }
+    if (!this.queue.length) this._stopDrain();
+  }
+
+  _startDrain() {
+    if (this.drainTimer) return;
+    this.drainTimer = setInterval(() => {
+      this._reap();
+      this._drainQueue();
+    }, 500);
+    if (this.drainTimer.unref) this.drainTimer.unref();
+  }
+
+  _stopDrain() {
+    if (this.drainTimer) {
+      clearInterval(this.drainTimer);
+      this.drainTimer = null;
+    }
   }
 
   _release(worker) {
     worker.busy = false;
     if (worker.dead || worker.turns >= RECYCLE_AFTER_TURNS) this._reap();
-    // Hand the freed (or a freshly filled) worker to the next waiter.
-    while (this.queue.length) {
-      const next = this.queue[0];
-      const w = this._free();
-      if (!w) break;
-      this.queue.shift();
-      clearTimeout(next.timer);
-      w.busy = true;
-      next.resolve(w);
-    }
+    this._drainQueue();
   }
 
   async runTurn(room, prompt, { onEvent = () => {} } = {}) {
@@ -343,7 +371,30 @@ class AcpPool {
       ready: this.workers.filter((w) => w.ready && !w.dead).length,
       busy: this.workers.filter((w) => w.busy).length,
       queued: this.queue.length,
+      warm: !!this.warm,
     };
+  }
+
+  // One-time, best-effort heat of the shared on-disk caches (auth token, compiled
+  // tool schemas, model endpoint). Measured: the first turn after a cold start is
+  // ~8.5s but every turn after is ~3s, and the cost is shared across workers — so a
+  // single throwaway turn here makes the user's first real turn fast too.
+  async prewarm() {
+    if (this.warming || this.warm) return;
+    this.warming = true;
+    try {
+      const w = await this._acquire();
+      try {
+        await w.runTurn({ cwd: os.homedir(), prompt: 'Reply with exactly: READY', permission: 'agent', onEvent: () => {} });
+        this.warm = true;
+      } finally {
+        this._release(w);
+      }
+    } catch {
+      /* best-effort; a later startPool may retry */
+    } finally {
+      this.warming = false;
+    }
   }
 }
 
@@ -354,12 +405,13 @@ export function startPool() {
   if (!POOL) {
     POOL = new AcpPool(POOL_SIZE);
     POOL.start();
+    if (process.env.ROOMCLI_ACP_PREWARM !== '0') POOL.prewarm();
   }
   return POOL;
 }
 
 export function poolStats() {
-  if (!acpEnabled()) return { enabled: false, size: 0, ready: 0, busy: 0, queued: 0 };
+  if (!acpEnabled()) return { enabled: false, size: 0, ready: 0, busy: 0, queued: 0, warm: false };
   if (!POOL) startPool();
   return POOL.stats();
 }
@@ -371,4 +423,12 @@ export function runTurnAcp(room, userRequest, { onEvent = () => {} } = {}) {
   if (!POOL) startPool();
   const prompt = buildPrompt(room, userRequest);
   return POOL.runTurn(room, prompt, { onEvent });
+}
+
+// Test-only: build an isolated pool with an injectable worker factory so the
+// acquire/release/queue logic can be exercised without spawning real processes.
+export function _createPoolForTest(size, makeWorker) {
+  const p = new AcpPool(size, makeWorker);
+  p.start();
+  return p;
 }

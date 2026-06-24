@@ -143,6 +143,40 @@ ok(acp.permissionDecision('chat', 'edit') === 'reject_once', 'chat rejects edit'
 ok(acp.permissionDecision('chat', 'read') === 'allow_once', 'chat allows read-only');
 ok(acp.permissionDecision('chat', 'fetch') === 'allow_once', 'chat allows fetch');
 
+// --- pool acquire/release regression (no real processes) ---
+// Fake worker: ready immediately, runTurn resolves on the next microtask.
+function makeFakeWorker() {
+  return {
+    ready: true, dead: false, busy: false, turns: 0,
+    start() { return Promise.resolve(); },
+    async runTurn() { this.turns += 1; return { ok: true, response: 'ok', memory: [] }; },
+    dispose() { this.dead = true; },
+  };
+}
+const fakePool = acp._createPoolForTest(2, makeFakeWorker);
+// Sequential turns must reuse workers without leaking 'busy' (the bug: every
+// acquire grabbed a SECOND worker, so the 2nd sequential turn starved).
+for (let i = 0; i < 5; i += 1) {
+  // eslint-disable-next-line no-await-in-loop
+  await fakePool.runTurn({ cwd: '.', permission: 'agent' }, 'x', {});
+}
+ok(fakePool.stats().busy === 0, 'no worker leaks busy after sequential turns');
+ok(fakePool.stats().queued === 0, 'queue empty after sequential turns');
+// Saturation: 4 concurrent turns on a 2-worker pool must all complete (2 queued
+// then served on release), and the pool returns to idle.
+await Promise.all(Array.from({ length: 4 }, () => fakePool.runTurn({ cwd: '.', permission: 'agent' }, 'x', {})));
+ok(fakePool.stats().busy === 0, 'pool idle after concurrent burst');
+ok(fakePool.stats().queued === 0, 'queue drained after concurrent burst');
+// A waiter served by a worker that gets REPLACED (dies) rather than freed: kill a
+// worker mid-flight, the drain poll should refill and serve the queued turn.
+const diePool = acp._createPoolForTest(1, makeFakeWorker);
+diePool.workers[0].runTurn = async function runTurnThenDie() { this.dead = true; return { ok: true, response: 'ok', memory: [] }; };
+const served = await Promise.all([
+  diePool.runTurn({ cwd: '.', permission: 'agent' }, 'x', {}),
+  diePool.runTurn({ cwd: '.', permission: 'agent' }, 'x', {}),
+]);
+ok(served.length === 2 && served.every((r) => r.ok), 'queued turn served after worker replaced');
+
 console.log('=== backfill (hermetic sqlite, generic cwd matching) ===');
 // A room whose working directory name is "billing-svc" should claim sessions run there —
 // no hardcoded project list; matching is driven purely by the room's own config.
