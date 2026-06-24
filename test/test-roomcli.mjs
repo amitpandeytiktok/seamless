@@ -4,6 +4,8 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Isolate all state under a temp dir BEFORE importing modules (they read SEAMLESS_DIR at load).
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'roomcli-test-'));
@@ -76,9 +78,49 @@ ok(tok && auth.checkToken(tok), 'login + checkToken');
 ok(!auth.checkToken('garbage'), 'bad token rejected');
 auth.logout(tok);
 ok(!auth.checkToken(tok), 'logout invalidates token');
+// Regression: issuing tokens must NOT rewrite roomcli.json. In-memory tokens
+// remove the read-modify-write race that used to drop the active token (surprise
+// logout) and the pinHash (surprise "set up again") during a busy session.
+const fileBefore = fs.readFileSync(path.join(TMP, 'roomcli.json'), 'utf8');
+const tokA = auth.login('47291837');
+const tokB = auth.login('47291837');
+const fileAfter = fs.readFileSync(path.join(TMP, 'roomcli.json'), 'utf8');
+ok(tokA && tokB && tokA !== tokB && auth.checkToken(tokA) && auth.checkToken(tokB), 'concurrent tokens coexist');
+ok(fileBefore === fileAfter, 'login does not rewrite roomcli.json (in-memory tokens)');
+ok(!JSON.parse(fileAfter).tokens, 'tokens are not persisted to disk');
 let threw = false;
 try { auth.setPin('1'); } catch { threw = true; }
 ok(threw, 'setPin rejects too-short on fresh state'); // note: pin already set, but length check first
+
+// Hardcoded ROOMCLI_PIN env path. Env is read at module import, so run a child
+// process with it set and a fresh data dir to prove: no setup needed, the env PIN
+// authenticates, setup is refused, and it can't be wiped.
+const authUrl = pathToFileURL(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/core/auth.js'),
+).href;
+const childCode = `
+import * as a from ${JSON.stringify(authUrl)};
+const R = [];
+R.push(a.hasPin() === true);
+R.push(a.setPin('12345678') === false);
+R.push(a.verifyPin('19951995') === true);
+R.push(a.verifyPin('00000000') === false);
+const t1 = a.login('19951995'), t2 = a.login('19951995');
+R.push(!!t1 && !!t2 && t1 !== t2 && a.checkToken(t1) && a.checkToken(t2));
+process.stdout.write(R.every(Boolean) ? 'ENVOK' : 'ENVFAIL:' + R.join(','));
+`;
+let envOut = '';
+try {
+  envOut = execFileSync(process.execPath, ['--input-type=module', '-e', childCode], {
+    env: {
+      ...process.env,
+      ROOMCLI_PIN: '19951995',
+      SEAMLESS_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'roomcli-envpin-')),
+    },
+    encoding: 'utf8',
+  }).trim();
+} catch (e) { envOut = 'THREW:' + (e.stdout || e.message); }
+ok(envOut === 'ENVOK', 'ROOMCLI_PIN hardcoded gate (no setup, env PIN logs in, setup refused)');
 
 console.log('=== engine.buildPrompt ===');
 const prompt = engine.buildPrompt(room, 'Deploy the site');

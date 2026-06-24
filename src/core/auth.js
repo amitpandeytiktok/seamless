@@ -9,6 +9,20 @@ import { SEAMLESS_DIR } from './config.js';
 const AUTH_FILE = path.join(SEAMLESS_DIR, 'roomcli.json');
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// Optional hardcoded PIN supplied by the deployment (e.g. set in the Windows
+// task wrapper as ROOMCLI_ROOT_HOSTS' sibling). When a valid 8-digit value is
+// present it becomes THE PIN: no first-run setup, and it can never be wiped by a
+// file write. Keeps the secret out of source control (lives only in the env).
+const ENV_PIN = String(process.env.ROOMCLI_PIN || '').trim();
+const ENV_PIN_OK = /^\d{8}$/.test(ENV_PIN);
+
+// Session tokens live in memory, not on disk. Persisting them meant every login
+// and token check did a read-modify-write of roomcli.json; under a busy session
+// those racing writes clobbered each other, silently dropping the active token
+// (surprise logout) and even the pinHash (surprise "set up again"). An in-process
+// Map is race-free; the only cost is that tokens don't survive a server restart.
+const TOKENS = new Map(); // token -> expiry epoch ms
+
 function load() {
   try {
     return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
@@ -34,15 +48,17 @@ export function getSlug() {
 }
 
 export function hasPin() {
-  return !!load().pinHash;
+  return ENV_PIN_OK || !!load().pinHash;
 }
 
 function hashPin(pin, salt) {
   return crypto.scryptSync(String(pin), salt, 32).toString('hex');
 }
 
-// First-run PIN setup (exactly 8 digits). Returns false if a PIN already exists.
+// First-run PIN setup (exactly 8 digits). Returns false if a PIN already exists
+// (either a hardcoded ROOMCLI_PIN or one previously stored on disk).
 export function setPin(pin) {
+  if (ENV_PIN_OK) return false;
   if (!/^\d{8}$/.test(String(pin))) {
     throw new Error('PIN must be exactly 8 digits');
   }
@@ -51,29 +67,21 @@ export function setPin(pin) {
   const salt = crypto.randomBytes(16).toString('hex');
   state.pinSalt = salt;
   state.pinHash = hashPin(pin, salt);
-  state.tokens = state.tokens || {};
   save(state);
   return true;
 }
 
 export function verifyPin(pin) {
+  if (ENV_PIN_OK) {
+    const got = Buffer.from(String(pin));
+    const want = Buffer.from(ENV_PIN);
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+  }
   const state = load();
   if (!state.pinHash || !state.pinSalt) return false;
   const got = Buffer.from(hashPin(pin, state.pinSalt), 'hex');
   const want = Buffer.from(state.pinHash, 'hex');
   return got.length === want.length && crypto.timingSafeEqual(got, want);
-}
-
-function purgeExpired(state) {
-  const now = Date.now();
-  let changed = false;
-  for (const [tok, exp] of Object.entries(state.tokens || {})) {
-    if (exp < now) {
-      delete state.tokens[tok];
-      changed = true;
-    }
-  }
-  return changed;
 }
 
 // Online brute-force throttle: after several bad PINs, briefly lock logins.
@@ -86,7 +94,7 @@ export function loginLocked() {
   return Date.now() < LOCK.until;
 }
 
-// Exchange a valid PIN for a bearer token.
+// Exchange a valid PIN for a bearer token (held in memory).
 export function login(pin) {
   if (Date.now() < LOCK.until) return null;
   if (!verifyPin(pin)) {
@@ -99,34 +107,24 @@ export function login(pin) {
   }
   LOCK.fails = 0;
   LOCK.until = 0;
-  const state = load();
-  state.tokens = state.tokens || {};
-  purgeExpired(state);
   const token = crypto.randomBytes(24).toString('base64url');
-  state.tokens[token] = Date.now() + TOKEN_TTL_MS;
-  save(state);
+  TOKENS.set(token, Date.now() + TOKEN_TTL_MS);
   return token;
 }
 
 export function checkToken(token) {
   if (!token) return false;
-  const state = load();
-  const exp = state.tokens?.[token];
+  const exp = TOKENS.get(token);
   if (!exp) return false;
   if (exp < Date.now()) {
-    delete state.tokens[token];
-    save(state);
+    TOKENS.delete(token);
     return false;
   }
   return true;
 }
 
 export function logout(token) {
-  const state = load();
-  if (state.tokens?.[token]) {
-    delete state.tokens[token];
-    save(state);
-  }
+  TOKENS.delete(token);
 }
 
 // Pull a bearer token from a request: Authorization header, x-room-token header,
