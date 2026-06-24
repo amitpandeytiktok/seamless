@@ -16,6 +16,14 @@ import { handleRoomApi, serveRoomUi, initRoomCli } from '../core/roomapi.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = path.join(__dirname, '..', 'web');
 
+// Hosts on which ONLY the PIN-gated Room CLI is exposed (the unauthenticated
+// dashboard + its APIs stay private to the LAN). Comma-separated, set per-deploy
+// e.g. ROOMCLI_ROOT_HOSTS=cli.example.com. Empty = behave as a normal LAN dashboard.
+const ROOT_HOSTS = (process.env.ROOMCLI_ROOT_HOSTS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -207,6 +215,19 @@ export function createServer() {
       return;
     }
     if (serveRoomUi(req, res, url)) return;
+
+    // On a configured public host, expose ONLY the Room CLI. The Seamless
+    // dashboard and its unauthenticated APIs (session list, cwds, summaries)
+    // must never be reachable from the internet — keep them LAN-only.
+    const hostName = (req.headers.host || '').split(':')[0].toLowerCase();
+    if (ROOT_HOSTS.length && ROOT_HOSTS.includes(hostName)) {
+      if (url.pathname.startsWith('/api/')) return notFound(res);
+      if (url.pathname === '/' || url.pathname === '/index.html') {
+        return serveStatic(req, res, '/room.html');
+      }
+      return serveStatic(req, res, url.pathname);
+    }
+
     if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);
     return serveStatic(req, res, url.pathname);
   });
@@ -230,6 +251,10 @@ export function start() {
     console.log(`Seamless server: http://${host}:${settings.port}`);
     // eslint-disable-next-line no-console
     console.log(`Room CLI (hidden, PIN-gated): http://${host}:${settings.port}/${room.slug}`);
+    if (ROOT_HOSTS.length) {
+      // eslint-disable-next-line no-console
+      console.log(`Room CLI public host(s) (root = Room CLI, dashboard blocked): ${ROOT_HOSTS.join(', ')}`);
+    }
     if (settings.host === '0.0.0.0') {
       // eslint-disable-next-line no-console
       console.log('(LAN-exposed: reachable from other devices on this network)');
