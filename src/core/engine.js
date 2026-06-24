@@ -56,6 +56,26 @@ function summarizeTool(name, args) {
   return name;
 }
 
+// Pull "MEMORY: <fact>" lines out of a reply into durable facts, returning the
+// cleaned visible response and the extracted facts. Shared by the cold engine and
+// the warm ACP pool so both curate room knowledge identically.
+export function extractMemory(text) {
+  const memory = [];
+  const response = String(text || '')
+    .split(/\r?\n/)
+    .filter((ln) => {
+      const m = ln.match(/^\s*MEMORY:\s*(.+)$/i);
+      if (m) {
+        memory.push(m[1].trim());
+        return false;
+      }
+      return true;
+    })
+    .join('\n')
+    .trim();
+  return { response, memory };
+}
+
 // Run a turn. onEvent receives compact {kind, ...} objects for live streaming.
 // Resolves with { ok, response, memory[], sessionId, usage, exitCode }.
 export function runTurn(room, userRequest, { onEvent = () => {} } = {}) {
@@ -141,21 +161,8 @@ export function runTurn(room, userRequest, { onEvent = () => {} } = {}) {
 
     child.on('close', (code) => {
       rl.close();
-      let response = messages.join('\n\n').trim();
-      // Extract MEMORY: lines into durable facts; strip them from the visible response.
-      const memory = [];
-      response = response
-        .split(/\r?\n/)
-        .filter((ln) => {
-          const m = ln.match(/^\s*MEMORY:\s*(.+)$/i);
-          if (m) {
-            memory.push(m[1].trim());
-            return false;
-          }
-          return true;
-        })
-        .join('\n')
-        .trim();
+      const joined = messages.join('\n\n').trim();
+      const { response, memory } = extractMemory(joined);
 
       if (!response && stderr) {
         onEvent({ kind: 'error', text: stderr.slice(0, 500) });

@@ -131,6 +131,18 @@ ok(prompt.length <= 26000, 'prompt within Windows arg budget');
 const big = engine.buildPrompt(room, 'x'.repeat(40000));
 ok(big.includes('x'.repeat(1000)), 'huge user request preserved (context shrinks instead)');
 
+console.log('=== acppool (warm-pool pure logic) ===');
+const acp = await import('../src/core/acppool.js');
+ok(acp.acpEnabled() === false, 'pool disabled when ROOMCLI_ACP_POOL unset');
+ok(acp.poolStats().enabled === false, 'poolStats reports disabled');
+// agent rooms auto-allow (and remember); chat rooms reject mutating tools, allow reads.
+ok(acp.permissionDecision('agent', 'execute') === 'allow_always', 'agent allows shell');
+ok(acp.permissionDecision('agent', 'edit') === 'allow_always', 'agent allows edit');
+ok(acp.permissionDecision('chat', 'execute') === 'reject_once', 'chat rejects shell');
+ok(acp.permissionDecision('chat', 'edit') === 'reject_once', 'chat rejects edit');
+ok(acp.permissionDecision('chat', 'read') === 'allow_once', 'chat allows read-only');
+ok(acp.permissionDecision('chat', 'fetch') === 'allow_once', 'chat allows fetch');
+
 console.log('=== backfill (hermetic sqlite, generic cwd matching) ===');
 // A room whose working directory name is "billing-svc" should claim sessions run there —
 // no hardcoded project list; matching is driven purely by the room's own config.

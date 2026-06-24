@@ -11,6 +11,7 @@ import {
   ensureSeed, readMemory, readLog, recordTurn, addDurable, removeDurable,
 } from './knowledge.js';
 import { runTurn } from './engine.js';
+import { acpEnabled, runTurnAcp, startPool, poolStats } from './acppool.js';
 import { runBackfill } from './backfill.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +46,7 @@ async function readBody(req) {
 export function initRoomCli() {
   const data = loadRooms();
   for (const r of data.rooms) ensureSeed(r);
+  startPool(); // pre-warm the ACP daemon pool (no-op unless ROOMCLI_ACP_POOL > 0)
   return { slug: auth.getSlug(), rooms: data.rooms.length };
 }
 
@@ -140,6 +142,11 @@ export async function handleRoomApi(req, res, url) {
     sendJson(res, 200, { tree: roomTree(), rooms: listRooms(), permissions: PERMISSIONS });
     return true;
   }
+  // GET /api/room/pool -> warm ACP daemon pool status
+  if (rest === 'pool' && method === 'GET') {
+    sendJson(res, 200, { pool: poolStats() });
+    return true;
+  }
   // POST /api/room/rooms -> create
   if (rest === 'rooms' && method === 'POST') {
     const body = await readBody(req);
@@ -228,7 +235,17 @@ export async function handleRoomApi(req, res, url) {
       write({ kind: 'started', room: room.id, cwd: resolveCwd(room), permission: room.permission });
       let result;
       try {
-        result = await runTurn(room, prompt, { onEvent: write });
+        if (acpEnabled()) {
+          try {
+            result = await runTurnAcp(room, prompt, { onEvent: write });
+          } catch {
+            // No warm worker / pre-stream failure — fall back to a cold turn.
+            write({ kind: 'status', text: 'no warm worker — cold starting…' });
+            result = await runTurn(room, prompt, { onEvent: write });
+          }
+        } else {
+          result = await runTurn(room, prompt, { onEvent: write });
+        }
       } catch (e) {
         write({ kind: 'error', text: String(e.message || e) });
         result = { ok: false, response: '', memory: [], sessionId: null, usage: null };
