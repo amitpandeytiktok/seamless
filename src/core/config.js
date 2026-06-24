@@ -10,7 +10,7 @@ export const GLOBAL_DB = path.join(COPILOT_DIR, 'session-store.db');
 export const SETTINGS_FILE = path.join(COPILOT_DIR, 'settings.json');
 export const CONFIG_FILE = path.join(COPILOT_DIR, 'config.json');
 
-export const SEAMLESS_DIR = path.join(HOME, '.seamless');
+export const SEAMLESS_DIR = process.env.SEAMLESS_DIR || path.join(HOME, '.seamless');
 export const SEAMLESS_CONFIG = path.join(SEAMLESS_DIR, 'config.json');
 
 // Approximate usable context windows (tokens) by model id. The CLI auto-compacts

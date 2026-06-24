@@ -3,8 +3,8 @@
 A session-aware **control room for the GitHub Copilot CLI** on Windows.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-22c3a6.svg)
-![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0b0e14.svg)
-![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933.svg)
+![Platform: Windows · macOS · Linux](https://img.shields.io/badge/Platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-0b0e14.svg)
+![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933.svg)
 
 Seamless auto-discovers your Copilot CLI sessions and renders an *ongoing live webpage* that
 reflects each session's internal state — the **context window** (how full it is), the token
@@ -99,9 +99,16 @@ src/
     actions.js   resume / new / terminal / open-folder launchers
     watch.js     debounced recursive fs.watch over the session-state dir
     watchdog.js  optional fleet-health bridge (tail-reads an external watchdog JSONL log)
+    roomstore.js Room CLI: nested room tree + persistence (~/.seamless/rooms.json)
+    knowledge.js Room CLI: on-disk optimized memory (memory.json / CONTEXT.md / log.jsonl)
+    engine.js    Room CLI: spawns `copilot -p`, parses JSONL, streams events, self-curates memory
+    auth.js      Room CLI: hashed PIN, hidden slug, expiring bearer tokens
+    backfill.js  Room CLI: distils session-store.db into per-room seed knowledge
+    roomapi.js   Room CLI: /api/room/* routes + hidden-path UI mount
   server/
-    server.js    node:http REST + SSE + static file server
+    server.js    node:http REST + SSE + static file server (also mounts Room CLI)
   web/           vanilla dashboard (no build step): index.html, styles.css, app.js
+                 + Room CLI SPA: room.html, room.css, room.js
   electron/
     main.js      desktop shell: boots the server in-process, window, tray, menu, IPC
     preload.cjs  contextBridge API
@@ -118,6 +125,54 @@ full dashboard dependency-free.
   source of truth), `session.db` (todos), `checkpoints/*.md`.
 
 Seamless never writes to Copilot's data; it only reads it and launches `copilot` for you.
+
+---
+
+## Room CLI — your personal control room
+
+Seamless also ships an optional, **hidden, PIN-gated control room** for *driving* Copilot CLI
+(not just observing it). Instead of juggling many terminal sessions, you organise your work into
+nested **rooms** — one per project or context — and run short, incremental Copilot turns inside
+each from any browser (including your phone over the LAN).
+
+The trick that keeps every turn cheap while still "knowing everything": each room keeps its own
+**optimised, on-disk knowledge** that is loaded into memory and injected as context at the start
+of each turn, then re-distilled after. Every turn is a *fresh* `copilot` session plus the room's
+compiled context — so you get "all context, always" without dragging an ever-growing transcript
+through the model.
+
+```
+~/.seamless/
+  rooms.json              the nested room tree
+  roomcli.json            hashed PIN + hidden slug + tokens   (created on first run)
+  rooms/<id>/
+    memory.json           source of truth: overview, durable facts, recent turns, stats
+    CONTEXT.md            rendered context block injected into each turn (budgeted)
+    log.jsonl             full append-only transcript of every turn
+```
+
+- **Rooms** nest freely. A small generic starter tree is created on first run (a **Workspace**
+  group with an **Example Project**, plus **Brainstorm** and **Ops & Deploy**) — rename, re-point
+  and add your own. Each room has a working directory (`~`-relative, so it resolves on any OS) and
+  a permission: **agent** (full tools) or **chat** (read-only — no bash/edit/create).
+- **Self-curating memory.** After each turn the model appends `MEMORY:` lines; these become the
+  room's *durable* facts automatically — zero extra cost, no separate summarisation pass.
+- **Backfill.** One click distils your existing `~/.copilot/session-store.db` (every past session)
+  into per-room seed knowledge, mapped by cwd / repo / keywords.
+- **Auth.** First load asks you to set a PIN. The room lives at a secret slug printed in the
+  server console (`Room CLI (hidden, PIN-gated): http://…/<slug>`). The main dashboard at `/`
+  is unaffected and needs no PIN.
+
+```powershell
+npm run server
+# console prints:  Room CLI (hidden, PIN-gated): http://localhost:4321/<slug>
+# open that URL, set a PIN, pick a room, start typing.
+```
+
+> **Privacy.** Only the Room CLI *code* is part of this repo. All of your room knowledge lives
+> under `~/.seamless/` (already git-ignored) and is **never** committed or uploaded. To move your
+> curated knowledge to another machine, copy the `~/.seamless/rooms/` folder and `rooms.json`
+> across by hand (e.g. `%USERPROFILE%\.seamless\` on Windows).
 
 ---
 
@@ -148,8 +203,9 @@ Model context-window limits and warn/danger thresholds live in `src/core/config.
 | command          | does                                            |
 | ---------------- | ----------------------------------------------- |
 | `npm start`      | launch the Electron desktop app                 |
-| `npm run server` | run just the web dashboard server               |
+| `npm run server` | run the web dashboard **and** Room CLI (prints the hidden Room CLI URL) |
 | `node test/test-core.mjs` | smoke-test the core analyzer against live data |
+| `npm run test:room` | hermetic Room CLI tests (rooms / knowledge / auth / engine / backfill) |
 
 ## License
 

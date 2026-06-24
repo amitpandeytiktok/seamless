@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Room CLI</title>
+    <link rel="icon" href="favicon.svg" />
+    <link rel="stylesheet" href="room.css" />
+  </head>
+  <body>
+    <!-- PIN gate -->
+    <div id="gate" class="gate">
+      <form id="gate-form" class="gate-card" autocomplete="off">
+        <div class="gate-brand"><span class="dot"></span> Room&nbsp;CLI</div>
+        <p id="gate-sub" class="gate-sub">Enter your PIN to open the control room.</p>
+        <input id="pin" class="pin-input" type="password" inputmode="numeric"
+               placeholder="••••" autocomplete="off" />
+        <button id="gate-btn" class="btn primary block" type="submit">Unlock</button>
+        <div id="gate-err" class="gate-err"></div>
+      </form>
+    </div>
+
+    <!-- App -->
+    <div id="app" class="app hidden">
+      <aside class="sidebar">
+        <div class="side-head">
+          <span class="brand"><span class="dot"></span> Room CLI</span>
+          <button id="btn-logout" class="icon-btn" title="Lock">⏏</button>
+        </div>
+        <div id="room-tree" class="room-tree"></div>
+        <div class="side-foot">
+          <button id="btn-new-room" class="btn ghost block">＋ New room</button>
+          <button id="btn-backfill" class="btn ghost block" title="Distil your past Copilot sessions into room knowledge">⟲ Backfill history</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="room-head">
+          <div class="room-id">
+            <span id="room-icon" class="room-icon">🗂️</span>
+            <div>
+              <div id="room-name" class="room-name">Select a room</div>
+              <div id="room-meta" class="room-meta"></div>
+            </div>
+          </div>
+          <div class="room-actions">
+            <button id="btn-knowledge" class="btn ghost" title="Knowledge">🧠 Knowledge</button>
+            <button id="btn-edit" class="btn ghost" title="Room settings">⚙</button>
+          </div>
+        </header>
+
+        <section id="console" class="console">
+          <div class="empty-state">Pick a room on the left to start an incremental CLI session.</div>
+        </section>
+
+        <form id="composer" class="composer hidden">
+          <textarea id="prompt" class="prompt" rows="1"
+                    placeholder="Ask, build, deploy… (Enter to send, Shift+Enter for newline)"></textarea>
+          <button id="send" class="btn primary" type="submit">Send</button>
+        </form>
+      </main>
+
+      <!-- Knowledge drawer -->
+      <aside id="kpanel" class="kpanel hidden">
+        <div class="kpanel-head">
+          <span>Room knowledge</span>
+          <button id="kpanel-close" class="icon-btn">✕</button>
+        </div>
+        <div id="kpanel-body" class="kpanel-body"></div>
+      </aside>
+    </div>
+
+    <!-- Room settings / create modal -->
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head"><h3 id="modal-title">Room</h3><button id="modal-close" class="icon-btn">✕</button></div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="room.js"></script>
+  </body>
+</html>

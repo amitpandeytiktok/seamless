@@ -11,6 +11,7 @@ import { recommend } from '../core/analyze.js';
 import * as actions from '../core/actions.js';
 import { createWatcher } from '../core/watch.js';
 import { readWatchdog } from '../core/watchdog.js';
+import { handleRoomApi, serveRoomUi, initRoomCli } from '../core/roomapi.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -188,13 +189,24 @@ function handleApi(req, res, url) {
 }
 
 export function createServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     let url;
     try {
       url = new URL(req.url, 'http://localhost');
     } catch {
       return notFound(res);
     }
+    // Room CLI: hidden, PIN-gated control room (API + its own UI at /<slug>).
+    if (url.pathname.startsWith('/api/room/')) {
+      try {
+        await handleRoomApi(req, res, url);
+      } catch (e) {
+        if (!res.headersSent) sendJson(res, 500, { error: String(e.message || e) });
+        else try { res.end(); } catch { /* ignore */ }
+      }
+      return;
+    }
+    if (serveRoomUi(req, res, url)) return;
     if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);
     return serveStatic(req, res, url.pathname);
   });
@@ -210,11 +222,14 @@ export function createServer() {
 
 export function start() {
   const settings = loadSettings();
+  const room = initRoomCli();
   const { server } = createServer();
   server.listen(settings.port, settings.host, () => {
     const host = settings.host === '0.0.0.0' ? 'localhost' : settings.host;
     // eslint-disable-next-line no-console
     console.log(`Seamless server: http://${host}:${settings.port}`);
+    // eslint-disable-next-line no-console
+    console.log(`Room CLI (hidden, PIN-gated): http://${host}:${settings.port}/${room.slug}`);
     if (settings.host === '0.0.0.0') {
       // eslint-disable-next-line no-console
       console.log('(LAN-exposed: reachable from other devices on this network)');
